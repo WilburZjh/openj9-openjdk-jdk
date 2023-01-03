@@ -25,7 +25,7 @@
 
 /*
  * ===========================================================================
- * (c) Copyright IBM Corp. 2022, 2022 All Rights Reserved
+ * (c) Copyright IBM Corp. 2022, 2023 All Rights Reserved
  * ===========================================================================
  */
 
@@ -52,7 +52,7 @@ import openj9.internal.criu.InternalCRIUSupport;
 import openj9.internal.criu.security.CRIUConfigurator;
 /*[ENDIF] CRIU_SUPPORT */
 
-import openj9.internal.security.FIPSConfigurator;
+import openj9.internal.security.RestrictedSecurity;
 
 /**
  * <p>This class centralizes all security properties and common security
@@ -144,10 +144,11 @@ public final class Security {
         }
 /*[ENDIF] CRIU_SUPPORT */
 
-        // Load FIPS properties.
-        boolean fipsEnabled = FIPSConfigurator.configureFIPS(props);
+        // Load restricted security mode properties.
+        boolean restrictedSecurityEnabled = RestrictedSecurity.configure(props);
         if (sdebug != null) {
-            sdebug.println(fipsEnabled ? "FIPS mode enabled.": "FIPS mode disabled.");
+            sdebug.println(restrictedSecurityEnabled ? "Restricted security mode enabled."
+                    : "Restricted security mode disabled.");
         }
     }
 
