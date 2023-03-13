@@ -32,6 +32,7 @@ import java.security.*;
 
 import sun.security.util.*;
 
+import openj9.internal.security.RestrictedSecurity;
 
 /**
  * This class identifies algorithms, such as cryptographic transforms, each
@@ -127,26 +128,54 @@ public class AlgorithmId implements Serializable, DerEncoder {
             throws IOException {
         this.algid = oid;
         if (params != null) {
+            System.out.println("AlgorithmId -> AlgorithmId(ObjectIdentifier oid, DerValue params) -> params != null");
             encodedParams = params.toByteArray();
             decodeParams();
         }
+        System.out.println("AlgorithmId -> AlgorithmId(ObjectIdentifier oid, DerValue params) -> params = null");
     }
 
     protected void decodeParams() throws IOException {
         String algidName = getName();
+        System.out.println("AlgorithmId -> decodeParams() -> algidName is: " + algidName);
         try {
-            algParams = AlgorithmParameters.getInstance(algidName);
+            System.out.println("AlgorithmId -> decodeParams() -> start getInstance...");
+            if(this.algid.equals(PBES2_oid)){
+                if (RestrictedSecurity.isFIPSSupportPKCS12()) {
+                    algParams = AlgorithmParameters
+                            .getInstance(RestrictedSecurity
+                            .getPBES2AlgParameters());
+                    if(algParams != null) {
+                        System.out.println("AlgorithmId -> decodeParams() -> RestrictedSecurity.isFIPSSupportPKCS12() -> algParams != null");
+                    } else {
+                        System.out.println("AlgorithmId -> decodeParams() -> RestrictedSecurity.isFIPSSupportPKCS12() -> algParams == null");
+                    }
+                } else {
+                    algParams = AlgorithmParameters.getInstance("PBES2");
+                    if(algParams != null) {
+                        System.out.println("AlgorithmId -> decodeParams() -> RestrictedSecurity.isNotFIPSSupportPKCS12() -> algParams != null");
+                    } else {
+                        System.out.println("AlgorithmId -> decodeParams() -> RestrictedSecurity.isNotFIPSSupportPKCS12() -> algParams == null");
+                    }
+                }
+            } else {
+                algParams = AlgorithmParameters.getInstance(algidName);
+            }
+            // algParams = AlgorithmParameters.getInstance(algidName);
+            System.out.println("AlgorithmId -> decodeParams() -> after getInstance...");
         } catch (NoSuchAlgorithmException e) {
             /*
              * This algorithm parameter type is not supported, so we cannot
              * parse the parameters.
              */
+            System.out.println("AlgorithmId -> decodeParams() -> no this algidName: " + algidName);
             algParams = null;
             return;
         }
-
+        System.out.println("AlgorithmId -> decodeParams() -> finish try, start parsing the parameters");
         // Decode (parse) the parameters
         algParams.init(encodedParams.clone());
+        System.out.println("AlgorithmId -> decodeParams() -> finish init the algParams.");
     }
 
     /**
@@ -259,18 +288,23 @@ public class AlgorithmId implements Serializable, DerEncoder {
                 }
             }
         } else if (o == KnownOIDs.PBES2) {
+            System.out.println("AlgorithmId -> getName() -> o = KnownOIDs.PBES2");
             if (algParams != null) {
+                System.out.println("AlgorithmId -> getName() -> o = KnownOIDs.PBES2 and algParams != null");
                 return algParams.toString();
             } else {
+                System.out.println("AlgorithmId -> getName() -> o = KnownOIDs.PBES2 but algParams = null");
                 // when getName() is called in decodeParams(), algParams is
                 // null, where AlgorithmParameters.getInstance("PBES2") will
                 // be used to initialize it.
             }
         }
         if (o != null) {
+            System.out.println("AlgorithmId -> getName() -> o != null");
             return o.stdName();
         } else {
             String n = aliasOidsTable().get(oidStr);
+            System.out.println("AlgorithmId -> getName() -> n: " + n + " algid.toString(): " + algid.toString());
             return (n != null) ? n : algid.toString();
         }
     }
@@ -398,7 +432,9 @@ public class AlgorithmId implements Serializable, DerEncoder {
         DerInputStream          in = val.toDerInputStream();
 
         algid = in.getOID();
+        System.out.println("AlgorithmId -> parse -> algid: " + algid.toString());
         if (in.available() == 0) {
+            System.out.println("AlgorithmId -> parse -> in.available() = 0");
             params = null;
         } else {
             params = in.getDerValue();
@@ -406,13 +442,17 @@ public class AlgorithmId implements Serializable, DerEncoder {
                 if (params.length() != 0) {
                     throw new IOException("invalid NULL");
                 }
+                System.out.println("AlgorithmId -> parse -> params.tag = DerValue.tag_Null");
                 params = null;
             }
             if (in.available() != 0) {
                 throw new IOException("Invalid AlgorithmIdentifier: extra data");
             }
+            System.out.println("AlgorithmId -> parse -> end else");
         }
-
+        if (params == null) {
+            System.out.println("AlgorithmId -> parse -> params is null");
+        }
         return new AlgorithmId(algid, params);
     }
 
@@ -592,6 +632,9 @@ public class AlgorithmId implements Serializable, DerEncoder {
         }
         return t;
     }
+
+    public static final ObjectIdentifier PBES2_oid =
+            ObjectIdentifier.of(KnownOIDs.PBES2);
 
     public static final ObjectIdentifier MD2_oid =
             ObjectIdentifier.of(KnownOIDs.MD2);

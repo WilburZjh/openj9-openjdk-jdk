@@ -22,6 +22,11 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+/*
+ * ===========================================================================
+ * (c) Copyright IBM Corp. 2022, 2023 All Rights Reserved
+ * ===========================================================================
+ */
 
 package sun.security.pkcs12;
 
@@ -75,6 +80,7 @@ import sun.security.pkcs.EncryptedPrivateKeyInfo;
 import sun.security.provider.JavaKeyStore.JKS;
 import sun.security.x509.AuthorityKeyIdentifierExtension;
 
+import openj9.internal.security.RestrictedSecurity;
 
 /**
  * This class provides the keystore implementation referred to as "PKCS12".
@@ -329,6 +335,7 @@ public final class PKCS12KeyStore extends KeyStoreSpi {
             DerInputStream in = val.toDerInputStream();
             aid = AlgorithmId.parse(val);
             algParams = aid.getParameters();
+            System.out.println("aid name is: " + aid.getName());
 
         } catch (IOException ioe) {
             UnrecoverableKeyException uke =
@@ -838,7 +845,16 @@ public final class PKCS12KeyStore extends KeyStoreSpi {
 
         PBEKeySpec keySpec = new PBEKeySpec(password);
         try {
-            SecretKeyFactory skFac = SecretKeyFactory.getInstance("PBE");
+            SecretKeyFactory skFac;
+            if (RestrictedSecurity.isFIPSSupportPKCS12()) {
+                skFac = SecretKeyFactory
+                        .getInstance(RestrictedSecurity
+                        .getPBES2SecretKeyFactory());
+                System.out.println("RestrictedSecurity.isFIPSSupportPKCS12() is true.");
+            } else {
+                skFac = SecretKeyFactory.getInstance("PBE");
+                System.out.println("RestrictedSecurity.isFIPSSupportPKCS12() is faluse.");
+            }
             skey = skFac.generateSecret(keySpec);
         } catch (Exception e) {
             throw new IOException("getSecretKey failed: " + e.getMessage(), e);
@@ -2079,21 +2095,35 @@ public final class PKCS12KeyStore extends KeyStoreSpi {
                         "(" + certProtectionAlgorithm +
                         " iterations: " + ic + ")");
                 }
-
+                System.out.println("In PKCS12Keystore.java, start trying...");
                 try {
                     RetryWithZero.run(pass -> {
                         // Use JCE
+                        System.out.println("PKCS12KeyStore -- certProtectionAlgorithm is: " + certProtectionAlgorithm);
                         Cipher cipher = Cipher.getInstance(certProtectionAlgorithm);
+                        System.out.println("PKCS12KeyStore -- 0");
                         SecretKey skey = getPBEKey(pass);
+                        System.out.println("PKCS12KeyStore -- 1");
                         try {
+                            System.out.println("PKCS12KeyStore -- 2.1");
                             cipher.init(Cipher.DECRYPT_MODE, skey, algParams);
+                            System.out.println("PKCS12KeyStore -- 2.2");
                         } finally {
+                            System.out.println("PKCS12KeyStore -- 3.1");
                             destroyPBEKey(skey);
+                            System.out.println("PKCS12KeyStore -- 3.2");
                         }
+                        System.out.println("PKCS12KeyStore -- 4");
                         loadSafeContents(new DerInputStream(cipher.doFinal(rawData)));
+                        System.out.println("PKCS12KeyStore -- 5");
                         return null;
                     }, password);
+                    System.out.println("PKCS12KeyStore -- 6 -|- The password is: " + String.valueOf(password));
                 } catch (Exception e) {
+                    System.out.println("The password is: " + String.valueOf(password));
+                    System.out.println(" ======================================== ");
+                    e.printStackTrace();
+                    System.out.println(" ======================================== ");
                     throw new IOException("keystore password was incorrect",
                             new UnrecoverableKeyException(
                                     "failed to decrypt safe contents entry: " + e));
