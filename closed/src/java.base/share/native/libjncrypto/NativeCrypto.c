@@ -2157,7 +2157,7 @@ int OSSL102_RSA_set0_crt_params(RSA *r2, BIGNUM *dmp1, BIGNUM *dmq1, BIGNUM *iqm
  */
 JNIEXPORT jint JNICALL Java_jdk_crypto_jniprovider_NativeCrypto_ChaCha20Init
   (JNIEnv *env, jobject thisObj, jlong c, jint mode, jbyteArray iv, jint ivLen,
-  jbyteArray key, jint key_len)
+  jbyteArray key, jint key_len, jboolean doReset)
 {
     EVP_CIPHER_CTX *ctx = (EVP_CIPHER_CTX*)(intptr_t) c;
     unsigned char *ivNative = NULL;
@@ -2169,15 +2169,20 @@ JNIEXPORT jint JNICALL Java_jdk_crypto_jniprovider_NativeCrypto_ChaCha20Init
         return -1;
     }
 
-    if ((0 == mode) || (1 == mode)) {
-        evp_cipher1 = (*OSSL_chacha20_poly1305)();
-        encrypt = mode;
-    } else if (2 == mode) {
-        /* encrypt or decrypt does not matter */
-        encrypt = 1;
-        evp_cipher1 = (*OSSL_chacha20)();
+    // first initialization
+    if (JNI_FALSE == doReset) {
+        if ((0 == mode) || (1 == mode)) {
+            evp_cipher1 = (*OSSL_chacha20_poly1305)();
+            encrypt = mode;
+        } else if (2 == mode) {
+            /* encrypt or decrypt does not matter */
+            encrypt = 1;
+            evp_cipher1 = (*OSSL_chacha20)();
+        } else {
+            return -1;
+        }
     } else {
-        return -1;
+        evp_cipher1 = NULL; // use the existed evp_cipher.
     }
 
     /* get the key and the iv */
@@ -2200,12 +2205,14 @@ JNIEXPORT jint JNICALL Java_jdk_crypto_jniprovider_NativeCrypto_ChaCha20Init
     }
 
     /* if using Poly1305 */
-    if (2 != mode) {
-        if (1 != (*OSSL_CIPHER_CTX_ctrl)(ctx, EVP_CTRL_AEAD_SET_IVLEN, ivLen, NULL)) {
-            printErrors();
-            (*env)->ReleaseByteArrayElements(env, iv, (jbyte*)ivNative, JNI_ABORT);
-            (*env)->ReleaseByteArrayElements(env, key, (jbyte*)keyNative, JNI_ABORT);
-            return -1;
+    if(JNI_FALSE == doReset) {
+        if (2 != mode) {
+            if (1 != (*OSSL_CIPHER_CTX_ctrl)(ctx, EVP_CTRL_AEAD_SET_IVLEN, ivLen, NULL)) {
+                printErrors();
+                (*env)->ReleaseByteArrayElements(env, iv, (jbyte*)ivNative, JNI_ABORT);
+                (*env)->ReleaseByteArrayElements(env, key, (jbyte*)keyNative, JNI_ABORT);
+                return -1;
+            }
         }
     }
 
