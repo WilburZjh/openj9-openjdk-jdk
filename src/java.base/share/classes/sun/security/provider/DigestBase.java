@@ -30,9 +30,14 @@ import java.security.DigestException;
 import java.security.ProviderException;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import jdk.internal.util.Preconditions;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
+
+/*[IF CRIU_SUPPORT]*/
+import openj9.internal.criu.CRIUSECProvider;
+/*[ENDIF] CRIU_SUPPORT*/
 
 /**
  * Common base message digest implementation for the Sun provider.
@@ -76,6 +81,10 @@ abstract class DigestBase extends MessageDigestSpi implements Cloneable {
     //  0: is already reset
     long bytesProcessed;
 
+    /*[IF CRIU_SUPPORT]*/
+    private static final Consumer<DigestBase> ResetHelper = digest -> digest.engineReset();        
+    /*[ENDIF] CRIU_SUPPORT */
+    
     /**
      * Main constructor.
      */
@@ -85,6 +94,10 @@ abstract class DigestBase extends MessageDigestSpi implements Cloneable {
         this.digestLength = digestLength;
         this.blockSize = blockSize;
         buffer = new byte[blockSize];
+
+        /*[IF CRIU_SUPPORT]*/
+        CRIUSECProvider.doOnRestart(this, ResetHelper);
+        /*[ENDIF] CRIU_SUPPORT*/
     }
 
     // return digest length. See JCA doc.

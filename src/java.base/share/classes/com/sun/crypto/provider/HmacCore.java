@@ -26,6 +26,7 @@
 package com.sun.crypto.provider;
 
 import java.util.Arrays;
+import java.util.function.Consumer;
 
 import java.nio.ByteBuffer;
 
@@ -35,6 +36,10 @@ import java.security.*;
 import java.security.spec.*;
 
 import sun.security.x509.AlgorithmId;
+
+/*[IF CRIU_SUPPORT]*/
+import openj9.internal.criu.CRIUSECProvider;
+/*[ENDIF] CRIU_SUPPORT*/
 
 /**
  * This class constitutes the core of HMAC-<MD> algorithms, where
@@ -59,6 +64,11 @@ abstract class HmacCore extends MacSpi implements Cloneable {
     private boolean first;       // Is this the first data to be processed?
 
     private final int blockLen;
+
+    
+    /*[IF CRIU_SUPPORT]*/
+    private static final Consumer<HmacCore> ResetHelper = hmacCore -> hmacCore.engineReset();        
+    /*[ENDIF] CRIU_SUPPORT */
 
     /**
      * Standard constructor, creates a new HmacCore instance instantiating
@@ -102,6 +112,10 @@ abstract class HmacCore extends MacSpi implements Cloneable {
         this.k_ipad = new byte[blockLen];
         this.k_opad = new byte[blockLen];
         first = true;
+
+        /*[IF CRIU_SUPPORT]*/
+        CRIUSECProvider.doOnRestart(this, ResetHelper);
+        /*[ENDIF] CRIU_SUPPORT*/
     }
 
     /**

@@ -26,11 +26,18 @@
 package sun.security.provider;
 
 import java.io.*;
+import java.lang.ref.SoftReference;
 import java.net.*;
 import java.security.*;
 import java.util.Arrays;
-
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 import sun.security.util.Debug;
+
+/*[IF CRIU_SUPPORT]*/
+import openj9.internal.criu.CRIUSECProvider;
+/*[ENDIF] CRIU_SUPPORT*/
 
 /**
  * Native PRNG implementation for Linux/MacOS.
@@ -86,11 +93,20 @@ public final class NativePRNG extends SecureRandomSpi {
 
     // which kind of RandomIO object are we creating?
     private enum Variant {
-        MIXED, BLOCKING, NONBLOCKING
+        MIXED, 
+        BLOCKING, 
+        NONBLOCKING, 
+        /*[IF CRIU_SUPPORT]*/
+        CRIU
+        /*[ENDIF] CRIU_SUPPORT */
     }
 
     // singleton instance or null if not available
     private static final RandomIO INSTANCE = initIO(Variant.MIXED);
+
+    /*[IF CRIU_SUPPORT]*/
+    private static final Consumer<NativePRNG> ClearHelper = nativePRNG -> nativePRNG.INSTANCE.clearRNGState();        
+    /*[ENDIF] CRIU_SUPPORT */
 
     /**
      * Get the System egd source (if defined).  We only allow "file:"
@@ -138,6 +154,7 @@ public final class NativePRNG extends SecureRandomSpi {
 
                     switch(v) {
                     case MIXED:
+                        System.out.println("This initIO object is a MIXED.");
                         URL egdUrl;
                         File egdFile = null;
 
@@ -168,6 +185,14 @@ public final class NativePRNG extends SecureRandomSpi {
                         seedFile = new File(NAME_URANDOM);
                         nextFile = new File(NAME_URANDOM);
                         break;
+
+                    /*[IF CRIU_SUPPORT]*/
+                    case CRIU:
+                        System.out.println("This initIO object is CRIU.");
+                        seedFile = new File(NAME_RANDOM);
+                        nextFile = new File(NAME_URANDOM);
+                        break;
+                    /*[ENDIF] CRIU_SUPPORT */
 
                     default:
                         // Shouldn't happen!
@@ -208,6 +233,9 @@ public final class NativePRNG extends SecureRandomSpi {
         if (INSTANCE == null) {
             throw new AssertionError("NativePRNG not available");
         }
+        /*[IF CRIU_SUPPORT]*/
+        CRIUSECProvider.doOnRestart(this, ClearHelper);
+        /*[ENDIF] CRIU_SUPPORT*/
     }
 
     // set the seed
@@ -326,6 +354,58 @@ public final class NativePRNG extends SecureRandomSpi {
             return INSTANCE.implGenerateSeed(numBytes);
         }
     }
+
+    /*[IF CRIU_SUPPORT]*/
+    /**
+     * A NativePRNG-like class that uses /dev/random for seed and
+     * /dev/urandom for random material.
+     *
+     * Note that it does not respect the egd properties, since we have
+     * no way of knowing what those qualities are.
+     *
+     * This is very similar to the outer NativePRNG class, minimizing any
+     * breakage to the serialization of the existing implementation.
+     *
+     * @since   1.8
+     */
+    public static final class CRIUNativePRNG extends SecureRandomSpi {
+        private static final long serialVersionUID = -6599091113397072932L;
+
+        private static final RandomIO INSTANCE = initIO(Variant.CRIU);
+
+        // return whether this is available
+        static boolean isAvailable() {
+            return INSTANCE != null;
+        }
+
+        // constructor, called by the JCA framework
+        public CRIUNativePRNG() {
+            super();
+            if (INSTANCE == null) {
+                throw new AssertionError(
+                    "NativePRNG$CRIUNativePRNG not available");
+            }
+        }
+
+        // set the seed
+        @Override
+        protected void engineSetSeed(byte[] seed) {
+            INSTANCE.implSetSeed(seed);
+        }
+
+        // get pseudo random bytes
+        @Override
+        protected void engineNextBytes(byte[] bytes) {
+            INSTANCE.implNextBytes(bytes);
+        }
+
+        // get true random bytes
+        @Override
+        protected byte[] engineGenerateSeed(int numBytes) {
+            return INSTANCE.implGenerateSeed(numBytes);
+        }
+    }
+    /*[ENDIF] CRIU_SUPPORT */
 
     /**
      * Nested class doing the actual work. Singleton, see INSTANCE above.
@@ -569,5 +649,13 @@ public final class NativePRNG extends SecureRandomSpi {
                     throw new ProviderException("nextBytes() failed", e);
                 }
         }
+
+        /*[IF CRIU_SUPPORT]*/
+        private void clearRNGState() {
+            if (mixRandom != null) {
+                mixRandom.clearState();
+            }
         }
+        /*[ENDIF] CRIU_SUPPORT*/
+    }
 }

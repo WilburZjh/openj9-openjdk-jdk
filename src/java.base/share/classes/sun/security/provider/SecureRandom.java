@@ -265,6 +265,14 @@ implements java.io.Serializable {
         remCount %= DIGEST_SIZE;
     }
 
+    /*[IF CRIU_SUPPORT]*/
+    void clearState() {
+        Arrays.fill(state, (byte) 0x00);
+        Arrays.fill(remainder, (byte) 0x00);
+        remCount = 0;
+    }
+    /*[ENDIF] CRIU_SUPPORT */
+
     /*
      * This method is called to restore the state of the random object from
      * a stream.
