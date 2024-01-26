@@ -108,8 +108,6 @@ abstract class P11Key implements Key, Length {
 
     private static final boolean DISABLE_NATIVE_KEYS_EXTRACTION;
 
-    private static boolean isPlainPBEKeySupportInFIPS = false;
-
     /**
      * {@systemProperty sun.security.pkcs11.disableKeyExtraction} property
      * indicating whether or not cryptographic keys within tokens are
@@ -555,7 +553,7 @@ abstract class P11Key implements Key, Length {
 
         public String getFormat() {
             token.ensureValid();
-            if (!isPlainPBEKeySupportInFIPS && (sensitive || !extractable || (isNSS && tokenObject))) {
+            if ((key == null) && (sensitive || !extractable || (isNSS && tokenObject))) {
                 return null;
             } else {
                 return "RAW";
@@ -568,7 +566,7 @@ abstract class P11Key implements Key, Length {
                 return null;
             }
 
-            if (isPlainPBEKeySupportInFIPS) {
+            if (key != null) {
                 return key.getEncoded();
             }
 
@@ -608,7 +606,6 @@ abstract class P11Key implements Key, Length {
         private char[] password;
         private final byte[] salt;
         private final int iterationCount;
-        private final SecretKey key;
         P11PBEKey(Session session, long keyID, String algorithm,
                 int keyLength, CK_ATTRIBUTE[] attributes,
                 char[] password, byte[] salt, int iterationCount) {
@@ -616,8 +613,6 @@ abstract class P11Key implements Key, Length {
             this.password = password.clone();
             this.salt = salt.clone();
             this.iterationCount = iterationCount;
-            this.key = null;
-            isPlainPBEKeySupportInFIPS = false;
         }
 
         // fips
@@ -628,8 +623,6 @@ abstract class P11Key implements Key, Length {
             this.password = password.clone();
             this.salt = salt.clone();
             this.iterationCount = iterationCount;
-            this.key = key;
-            isPlainPBEKeySupportInFIPS = true;
         }
 
         @Override
